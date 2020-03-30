@@ -57,7 +57,7 @@ class TestApp:
 
     def main(self):
         self.startup()
-        self.test_replacement()
+        # self.test_replacement()
         self.test_simultaneous()
         self.shutdown()
 
@@ -69,11 +69,12 @@ class TestApp:
         first_tx = collateral.adapter.join(our_address, Wad(4))
         logging.info(f"Submitting first TX with gas price deliberately too low")
         self._run_future(first_tx.transact_async(gas_price=FixedGasPrice(1000)))
-        time.sleep(2)
+        time.sleep(0.3)
 
         second_tx = collateral.adapter.join(our_address, Wad(6))
         logging.info(f"Replacing first TX with legitimate gas price")
-        second_tx.transact(replace=first_tx, gas_price=FixedGasPrice(2*GWEI))
+        self._run_future(second_tx.transact_async(replace=first_tx, gas_price=FixedGasPrice(2*GWEI)))
+        time.sleep(0.3)
 
         assert first_tx.replaced
 
@@ -84,6 +85,7 @@ class TestApp:
         asyncio.sleep(6)
 
     def shutdown(self):
+        time.sleep(6)
         logging.info(f"Exiting {ilk.name} from our urn")
         # balance = mcd.vat.gem(ilk, our_address)
         # assert collateral.adapter.exit(our_address, balance).transact()
