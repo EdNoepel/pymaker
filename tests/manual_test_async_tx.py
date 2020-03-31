@@ -56,6 +56,10 @@ class TestApp:
         self.wrap_amount = Wad(10)
 
     def main(self):
+        # tx_hash = '0x0e77dba683f10aee57114f6a753c33b7df5a2a99e63d7a1805e9e81f5694a917'
+        # encoded = Web3.toBytes(hexstr=tx_hash)
+        # assert len(encoded) == 32
+        # print(encoded)
         self.startup()
         # self.test_replacement()
         self.test_simultaneous()
