@@ -17,6 +17,7 @@
 
 import asyncio
 import logging
+import os
 import requests
 import sys
 import threading
@@ -37,11 +38,14 @@ logging.getLogger("web3").setLevel(logging.INFO)
 logging.getLogger("asyncio").setLevel(logging.INFO)
 logging.getLogger("requests").setLevel(logging.INFO)
 
-# requests.adapters.DEFAULT_POOLSIZE = 100
-endpoint_uri = f"https://localhost:8545"
-web3 = Web3(HTTPProvider(endpoint_uri=endpoint_uri,
-                         request_kwargs={"timeout": 60},
-                         session_kwargs={"pool_connections": 50, "pool_maxsize": 50}))
+endpoint_uri = os.environ["ETH_RPC_URL"]
+
+adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+session = requests.Session()
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
+web3 = Web3(HTTPProvider(endpoint_uri=endpoint_uri, session=session))
 web3.eth.defaultAccount = sys.argv[1]   # ex: 0x0000000000000000000000000000000aBcdef123
 register_keys(web3, [sys.argv[2]])      # ex: key_file=~keys/default-account.json,pass_file=~keys/default-account.pass
 
@@ -71,18 +75,19 @@ class TestApp:
 
     def submit_multiple_txs(self):
         amount_to_join = Wad(3)
-        for i in range(1, 11):
+        for i in range(1, 21):
             join = collateral.adapter.join(our_address, amount_to_join)
-            self._run_future(join.transact_async(gas_price=FixedGasPrice(int(1.22*GWEI))))
+            self._run_future(join.transact_async(gas_price=FixedGasPrice(int(1.11*GWEI))))
             self.joined += amount_to_join
 
     def shutdown(self):
         time.sleep(9)
         logging.info(f"Exiting {ilk.name} from our urn")
         balance = mcd.vat.gem(ilk, our_address)
-        assert collateral.adapter.exit(our_address, balance).transact()
-        # assert collateral.adapter.exit(our_address, self.joined).transact()
-        logging.info(f"Balance is {mcd.vat.gem(ilk, our_address)} {ilk.name}")
+        if balance > Wad(0):
+            assert collateral.adapter.exit(our_address, balance).transact()
+            # assert collateral.adapter.exit(our_address, self.joined).transact()
+            logging.info(f"Balance is {mcd.vat.gem(ilk, our_address)} {ilk.name}")
         logging.info(f"Unwrapping {self.wrap_amount} ETH")
         assert collateral.gem.withdraw(self.wrap_amount).transact()
 
