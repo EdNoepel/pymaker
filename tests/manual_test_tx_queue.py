@@ -40,7 +40,8 @@ logging.getLogger("requests").setLevel(logging.INFO)
 
 endpoint_uri = os.environ["ETH_RPC_URL"]
 
-adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+pool_size = 10
+adapter = requests.adapters.HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size)
 session = requests.Session()
 session.mount('http://', adapter)
 session.mount('https://', adapter)
