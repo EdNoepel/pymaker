@@ -496,6 +496,9 @@ class Transact:
 
         return estimate
 
+    def revert_reason(self) -> str:
+        raise NotImplementedError("under development")
+
     def transact(self, **kwargs) -> Optional[Receipt]:
         """Executes the Ethereum transaction synchronously.
 
