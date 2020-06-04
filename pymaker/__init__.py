@@ -381,6 +381,8 @@ class Transact:
         self.status = TransactStatus.NEW
         self.nonce = None
         self.replaced = False
+        self.tx_hash = None
+        self.tx_hashes = []
 
     def _is_parity(self) -> bool:
         global node_is_parity
@@ -432,10 +434,10 @@ class Transact:
             if self.function_name is None:
                 return self.web3.eth.sendTransaction({**transaction_params, **{'to': self.address.address,
                                                                                'data': self.parameters[0]}})
-
             else:
-                return self._contract_function().transact(transaction_params)
-
+                result = self._contract_function().transact(transaction_params)
+                print("call result: " + result.hex())
+                return result
         else:
             return self.web3.eth.sendTransaction({**transaction_params, **{'to': self.address.address}})
 
@@ -497,7 +499,28 @@ class Transact:
         return estimate
 
     def revert_reason(self) -> str:
-        raise NotImplementedError("under development")
+        assert self.tx_hash is not None
+        # error_method_id = "0x08c379a0"
+
+        tx = self.web3.eth.getTransaction(self.tx_hash)
+        print(f"got tx {tx} from block {tx.blockNumber} for hash {self.tx_hash}")
+        new_tx = {
+            'from': tx['from'],
+            'to': tx['to'],
+            'value': tx['value'],
+        }
+        if self._is_parity():
+            new_tx['data'] = self.tx_hash.hex()
+        else:
+            new_tx['hash'] = self.tx_hash.hex()
+            new_tx['blockNumber'] = tx['blockNumber']
+
+        # FIXME: Geth response is either empty or a "missing trie node" error is raised
+        #  Parity produces either "VM execution error" or
+        #  "This request is not supported because your node is running with state pruning."
+
+        return self.web3.eth.call(new_tx, tx.blockNumber)
+        # TODO: parse the reason from data returned by eth.call
 
     def transact(self, **kwargs) -> Optional[Receipt]:
         """Executes the Ethereum transaction synchronously.
@@ -583,7 +606,6 @@ class Transact:
             self.nonce = replaced_tx.nonce
 
         # Initialize variables which will be used in the main loop.
-        tx_hashes = []
         initial_time = time.time()
         gas_price_last = 0
 
@@ -598,7 +620,7 @@ class Transact:
                         self.logger.debug(f"Transaction with nonce={self.nonce} was replaced with a newer transaction")
                         return None
 
-                    for tx_hash in tx_hashes:
+                    for tx_hash in self.tx_hashes:
                         receipt = self._get_receipt(tx_hash)
                         if receipt:
                             if receipt.successful:
@@ -624,7 +646,7 @@ class Transact:
             # - no transaction has been sent yet, or
             # - the requested gas price has changed enough since the last transaction has been sent
             gas_price_value = gas_price.get_gas_price(seconds_elapsed)
-            if len(tx_hashes) == 0 or ((gas_price_value is not None) and (gas_price_last is not None) and
+            if len(self.tx_hashes) == 0 or ((gas_price_value is not None) and (gas_price_last is not None) and
                                            (gas_price_value > gas_price_last * 1.125)):
                 gas_price_last = gas_price_value
 
@@ -638,18 +660,18 @@ class Transact:
                             else:
                                 self.nonce = self.web3.eth.getTransactionCount(from_account, block_identifier='pending')
 
-                        tx_hash = self._func(from_account, gas, gas_price_value, self.nonce)
-                        tx_hashes.append(tx_hash)
+                        self.tx_hash = self._func(from_account, gas, gas_price_value, self.nonce)
+                        self.tx_hashes.append(self.tx_hash)
 
                     self.logger.info(f"Sent transaction {self.name()} with nonce={self.nonce}, gas={gas},"
                                      f" gas_price={gas_price_value if gas_price_value is not None else 'default'}"
-                                     f" (tx_hash={bytes_to_hexstring(tx_hash)})")
+                                     f" (tx_hash={bytes_to_hexstring(self.tx_hash)})")
                 except Exception as e:
                     self.logger.warning(f"Failed to send transaction {self.name()} with nonce={self.nonce}, gas={gas},"
                                         f" gas_price={gas_price_value if gas_price_value is not None else 'default'}"
                                         f" ({e})")
 
-                    if len(tx_hashes) == 0:
+                    if len(self.tx_hashes) == 0:
                         raise
 
             await asyncio.sleep(0.25)
